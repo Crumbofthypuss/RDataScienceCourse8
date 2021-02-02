@@ -1,0 +1,15 @@
+base
+lattice
+ggplot2
+caret
+randomForest
+gbm
+rpart
+rpart.plot
+dplyr
+zoo
+xts
+PerformanceAnalytics
+foreach
+iterators
+doParallel

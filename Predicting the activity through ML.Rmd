@@ -1,0 +1,84 @@
+---
+title: "Predicting the activity through ML"
+author: "Matthew Evangelista"
+date: "1/30/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(gbm)
+library(rpart)
+library(rpart.plot)
+library(dplyr)
+library(PerformanceAnalytics)
+library(doParallel)
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+```
+
+## Summary
+In this project, we are tasked of predicting what weight lifting movement is being done through the use of machine learning on certain variables. First, the datasets were subsetted to include only the variables that would be good predictors for the movement. Three machine learning methods are then done to find the method with the highest accuracy. The results show that random forest provides the highest accuracy of 100% for the training set. 
+
+## Basic Exploratory Data Analysis and Cleaning
+First off, let us understand the contents of the testing and traning datasets. We may opt to donwload it through the code but was not done in this one.
+```{r CACHE=TRUE}
+training<- read.csv("pml-training.csv")
+testing<-read.csv("pml-testing.csv")
+str(training)
+```
+As seen from the data, there are 20 observations with 160 variables. Because some of the variables are not really needed to determining the activity, we would remove some of them specifically those with NA values and those with nearly zero variance contribution (those with few unique values as compared to the number of samples) which is generally factor variables. The first 6 variables are also removed which just serves as identifiers for the sample person.
+```{r cache=TRUE}
+training <-training[,colSums(is.na(training))==0]
+zeroVar<- nearZeroVar(training)
+training<- training[,-zeroVar]
+training<- training[,-(1:6)]
+testing<- testing[,colnames(testing) %in% colnames(training)]
+training$classe<- as.factor(training$classe) #for future analysis
+str(training)
+```
+
+## Analysis on several Machine Learning Algorithms
+First, we partition the training data into the training data itself and validation data by 75% training-25% validation.Several methods machine learning methods will be done on the dataset, specifically Random Forests(rf), gradient boosting(gbm), and linear discriminant analysis(lda).This will be done with a 5-fold cross validation repeated 5 times. 
+```{r cache=TRUE}
+set.seed(1234)
+partition<- createDataPartition(training$classe, p=0.75, list=FALSE)
+train<- training[complete.cases(training[partition,]),]
+test<- training[-partition,]
+```
+```{r cache=TRUE}
+control<- trainControl(method="cv",number=3,classProbs=TRUE)
+method1<- train(x=train[,-52],y=train$classe,method="rf",metric="Accuracy",trcontrol=control,ntree=500)
+method2<- train(x=train[,-52],y=train$classe,method="gbm",metric="Accuracy",trControl=control,verbose=FALSE)
+method3<- train(x=train[,-52],y=train$classe,method="lda",metric="Accuracy",trcontrol=control,verbose=FALSE)
+```
+With these methods, we can now predict the classe values of the test dataset and check the accuracy of each one using confusionMatrix. We then choose the one with the highest accuracy between the 3.
+```{r}
+predicted1<- predict(method1, newdata=test[,-52])
+predicted2<- predict(method2, newdata=test[,-52])
+predicted3<- predict(method3, newdata=test[,-52])
+print(paste0("Random forest accuracy: ",as.character(confusionMatrix(predicted1, as.factor(test$classe))$overall[[1]])))
+print(paste0("Gradient Boosting Method accuracy: ",as.character(confusionMatrix(predicted2, as.factor(test$classe))$overall[[1]])))
+print(paste0("Linear Discriminant Analysis accuracy: ", as.character(confusionMatrix(predicted3, as.factor(test$classe))$overall[[1]])))
+```
+As seen from above, the random forest method produced the most accurate result from the validation dataset. To see which of the variables has the most impact on the model,we can show them through varImp
+```{r}
+important<-varImp(method1$finalModel,scale=TRUE)
+important
+```
+
+## Results based on the best algorithm
+Based on our training datasets, Random Forest produced the most accurate model. Applying it to the testing data:
+```{r}
+testing$classe<- predict(method1,newdata=testing)
+testing$classe
+```
+```{r echo=FALSE}
+stopCluster(cl)
+```
+As seen from the values, most of the values belonged to activity A and B. Only 5 of the observations belonged to C,D and E activities.
